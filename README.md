@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.org/baidu/braft.svg?branch=master)](https://travis-ci.org/baidu/braft)
+[![Build Status](https://github.com/darion-yaphet/braft/actions/workflows/build.yml/badge.svg)](https://github.com/darion-yaphet/braft/actions/workflows/build.yml)
 
 ---
 
