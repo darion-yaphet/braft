@@ -38,7 +38,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y -qq libgflags-dev \
+        sudo apt-get install -y libgflags-dev \
             libprotobuf-dev libprotoc-dev protobuf-compiler \
             libleveldb-dev libgoogle-perftools-dev libgtest-dev gdb
         # Some releases of libgtest-dev only ship sources
@@ -72,12 +72,13 @@ jobs:
         "$HOME/bin/bazel" build -c opt --copt -DHAVE_ZLIB=1 //...
     - name: Run tests
       if: ${{ matrix.build_tool == 'cmake' }}
+      id: test-braft
       working-directory: ${{ github.workspace }}/bld/test
       run: |
         ulimit -c unlimited -S
         sh ../../test/run_tests.sh
     - name: Collect failure info
-      if: ${{ matrix.build_tool == 'cmake' && failure() }}
+      if: ${{ matrix.build_tool == 'cmake' && steps.test-braft.conclusion == 'failure' }}
       working-directory: ${{ github.workspace }}/bld/test
       run: |
         COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
@@ -109,14 +110,18 @@ jobs:
       run: |
         mkdir -p thirdparty
         git clone --depth 1 --branch "${{ env.BRPC_VERSION }}" https://github.com/brpc/brpc.git thirdparty/brpc
+        # CMAKE_POLICY_VERSION_MINIMUM: brpc 1.1.0 requires cmake_minimum_required
+        # below 3.5, which CMake >= 4 (homebrew) rejects
         cmake -S thirdparty/brpc -B thirdparty/brpc/bld \
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
           -DCMAKE_PREFIX_PATH="$(brew --prefix)" \
           -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)"
         cmake --build thirdparty/brpc/bld -j"$(sysctl -n hw.ncpu)"
         sudo cmake --install thirdparty/brpc/bld
     - name: Build with cmake
       run: |
-        cmake -S "${{ github.workspace }}" -B "${{ env.CMAKE_BUILD_DIR }}" -DBUILD_UNIT_TESTS=ON
+        cmake -S "${{ github.workspace }}" -B "${{ env.CMAKE_BUILD_DIR }}" -DBUILD_UNIT_TESTS=ON \
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
         cmake --build "${{ env.CMAKE_BUILD_DIR }}" -j"$(sysctl -n hw.ncpu)"
     - name: Run tests
       working-directory: ${{ github.workspace }}/bld/test
@@ -148,7 +153,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y -qq libgflags-dev \
+        sudo apt-get install -y libgflags-dev \
             libprotobuf-dev libprotoc-dev protobuf-compiler \
             libleveldb-dev libgoogle-perftools-dev libgtest-dev
         if [ ! -e /usr/lib/x86_64-linux-gnu/libgtest.a ] && [ ! -e /usr/lib/libgtest.a ]; then
