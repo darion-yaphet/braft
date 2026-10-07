@@ -30,7 +30,7 @@ foreach(BRAFT_UT ${TEST_BRAFT_SRCS})
         #"-Xlinker \"-(\""
                           ${GTEST_MAIN_LIB}
                           ${GTEST_LIB}
-                          ${GPERFTOOLS_LIBRARY}
+                          ${GPERFTOOLS_LIBRARIES}
                           ${DYNAMIC_LIB}
                           #                  "-Xlinker \"-)\""
                           )

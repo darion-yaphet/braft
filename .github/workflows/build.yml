@@ -7,6 +7,10 @@ permissions:
 env:
   # Keep in sync with the brpc version pinned in WORKSPACE
   BRPC_VERSION: 1.1.0
+  # brpc 1.1.0 cannot build on Apple Silicon (x86-only rdtsc asm on macOS and
+  # homebrew protobuf now requires C++17 via abseil), so the macOS job uses the
+  # newest pinned release instead
+  BRPC_VERSION_MACOS: 1.18.0
 
 jobs:
   linux:
@@ -40,7 +44,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libgflags-dev \
             libprotobuf-dev libprotoc-dev protobuf-compiler \
-            libleveldb-dev libgoogle-perftools-dev libgtest-dev gdb
+            libleveldb-dev libgtest-dev gdb
         # Some releases of libgtest-dev only ship sources
         if [ ! -e /usr/lib/x86_64-linux-gnu/libgtest.a ] && [ ! -e /usr/lib/libgtest.a ]; then
           cd /usr/src/googletest && sudo cmake . && sudo make -j"$(nproc)" && sudo make install
@@ -109,9 +113,7 @@ jobs:
       working-directory: ${{ github.workspace }}
       run: |
         mkdir -p thirdparty
-        git clone --depth 1 --branch "${{ env.BRPC_VERSION }}" https://github.com/brpc/brpc.git thirdparty/brpc
-        # CMAKE_POLICY_VERSION_MINIMUM: brpc 1.1.0 requires cmake_minimum_required
-        # below 3.5, which CMake >= 4 (homebrew) rejects
+        git clone --depth 1 --branch "${{ env.BRPC_VERSION_MACOS }}" https://github.com/brpc/brpc.git thirdparty/brpc
         cmake -S thirdparty/brpc -B thirdparty/brpc/bld \
           -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
           -DCMAKE_PREFIX_PATH="$(brew --prefix)" \
@@ -155,7 +157,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libgflags-dev \
             libprotobuf-dev libprotoc-dev protobuf-compiler \
-            libleveldb-dev libgoogle-perftools-dev libgtest-dev
+            libleveldb-dev libgtest-dev
         if [ ! -e /usr/lib/x86_64-linux-gnu/libgtest.a ] && [ ! -e /usr/lib/libgtest.a ]; then
           cd /usr/src/googletest && sudo cmake . && sudo make -j"$(nproc)" && sudo make install
         fi
