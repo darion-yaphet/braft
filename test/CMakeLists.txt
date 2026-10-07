@@ -1,5 +1,7 @@
 find_package(Gperftools)
-include_directories(${GPERFTOOLS_INCLUDE_DIR})
+if(GPERFTOOLS_FOUND)
+    include_directories(${GPERFTOOLS_INCLUDE_DIR})
+endif()
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/test)
 

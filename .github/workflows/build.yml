@@ -5,12 +5,10 @@ permissions:
   contents: read
 
 env:
-  # Keep in sync with the brpc version pinned in WORKSPACE
-  BRPC_VERSION: 1.1.0
-  # brpc 1.1.0 cannot build on Apple Silicon (x86-only rdtsc asm on macOS and
-  # homebrew protobuf now requires C++17 via abseil), so the macOS job uses the
-  # newest pinned release instead
-  BRPC_VERSION_MACOS: 1.18.0
+  # Keep in sync with the brpc version pinned in WORKSPACE. brpc 1.1.0 cannot
+  # build on ubuntu-22.04+ (its -D__const__= breaks glibc >= 2.35 headers) nor
+  # on Apple Silicon, so the pinned version is the newest stable release.
+  BRPC_VERSION: 1.18.0
 
 jobs:
   linux:
@@ -113,7 +111,7 @@ jobs:
       working-directory: ${{ github.workspace }}
       run: |
         mkdir -p thirdparty
-        git clone --depth 1 --branch "${{ env.BRPC_VERSION_MACOS }}" https://github.com/brpc/brpc.git thirdparty/brpc
+        git clone --depth 1 --branch "${{ env.BRPC_VERSION }}" https://github.com/brpc/brpc.git thirdparty/brpc
         cmake -S thirdparty/brpc -B thirdparty/brpc/bld \
           -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
           -DCMAKE_PREFIX_PATH="$(brew --prefix)" \
