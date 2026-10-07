@@ -1,6 +1,7 @@
 find_package(Gperftools)
 if(GPERFTOOLS_FOUND)
     include_directories(${GPERFTOOLS_INCLUDE_DIR})
+    set(GPERFTOOLS_LINK_LIBRARIES ${GPERFTOOLS_LIBRARIES})
 endif()
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_SOURCE_DIR}/test)
@@ -32,7 +33,7 @@ foreach(BRAFT_UT ${TEST_BRAFT_SRCS})
         #"-Xlinker \"-(\""
                           ${GTEST_MAIN_LIB}
                           ${GTEST_LIB}
-                          ${GPERFTOOLS_LIBRARIES}
+                          ${GPERFTOOLS_LINK_LIBRARIES}
                           ${DYNAMIC_LIB}
                           #                  "-Xlinker \"-)\""
                           )

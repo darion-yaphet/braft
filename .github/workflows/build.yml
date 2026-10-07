@@ -12,14 +12,16 @@ env:
 
 jobs:
   linux:
-    name: linux ${{ matrix.os }} ${{ matrix.compiler }} ${{ matrix.build_tool }}
+    name: linux ${{ matrix.os }} ${{ matrix.compiler }} cmake
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         compiler: [clang, gcc]
         os: [ubuntu-22.04, ubuntu-24.04]
-        build_tool: [cmake, bazel]
+        # The bazel leg is dropped: brpc 1.18's BUILD.bazel requires rules_cc,
+        # which the Bazel 0.25.2-era WORKSPACE setup cannot provide. Reviving
+        # the bazel build needs a separate migration (bzlmod or newer bazel).
         include:
         - compiler: clang
           CC: clang
@@ -47,15 +49,7 @@ jobs:
         if [ ! -e /usr/lib/x86_64-linux-gnu/libgtest.a ] && [ ! -e /usr/lib/libgtest.a ]; then
           cd /usr/src/googletest && sudo cmake . && sudo make -j"$(nproc)" && sudo make install
         fi
-    - name: Install bazel
-      if: ${{ matrix.build_tool == 'bazel' }}
-      run: |
-        sudo apt-get install -y python3
-        wget https://github.com/bazelbuild/bazel/releases/download/0.25.2/bazel-0.25.2-installer-linux-x86_64.sh
-        chmod a+x bazel-0.25.2-installer-linux-x86_64.sh
-        ./bazel-0.25.2-installer-linux-x86_64.sh --user
     - name: Install brpc
-      if: ${{ matrix.build_tool == 'cmake' }}
       working-directory: ${{ github.workspace }}
       run: |
         mkdir -p thirdparty
@@ -64,23 +58,17 @@ jobs:
         cmake --build thirdparty/brpc/bld -j"$(nproc)"
         sudo cmake --install thirdparty/brpc/bld
     - name: Build with cmake
-      if: ${{ matrix.build_tool == 'cmake' }}
       run: |
         cmake -S "${{ github.workspace }}" -B "${{ env.CMAKE_BUILD_DIR }}" -DBUILD_UNIT_TESTS=ON
         cmake --build "${{ env.CMAKE_BUILD_DIR }}" -j"$(nproc)"
-    - name: Build with bazel
-      if: ${{ matrix.build_tool == 'bazel' }}
-      run: |
-        "$HOME/bin/bazel" build -c opt --copt -DHAVE_ZLIB=1 //...
     - name: Run tests
-      if: ${{ matrix.build_tool == 'cmake' }}
       id: test-braft
       working-directory: ${{ github.workspace }}/bld/test
       run: |
         ulimit -c unlimited -S
         sh ../../test/run_tests.sh
     - name: Collect failure info
-      if: ${{ matrix.build_tool == 'cmake' && steps.test-braft.conclusion == 'failure' }}
+      if: ${{ steps.test-braft.conclusion == 'failure' }}
       working-directory: ${{ github.workspace }}/bld/test
       run: |
         COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
