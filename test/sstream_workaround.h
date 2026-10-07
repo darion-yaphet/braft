@@ -11,9 +11,21 @@
 #ifdef private
 # undef private
 # include <sstream>
+# if __cplusplus >= 201703L
+// Same story for C++17 stdlib headers (e.g. <any> redeclares
+// _Manager_internal/_Manager_external with different access)
+#  include <any>
+#  include <optional>
+#  include <variant>
+# endif
 # define private public
 #else
 # include <sstream>
+# if __cplusplus >= 201703L
+#  include <any>
+#  include <optional>
+#  include <variant>
+# endif
 #endif
 
 #endif  //  BUTIL_TEST_SSTREAM_WORKAROUND
