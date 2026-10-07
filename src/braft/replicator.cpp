@@ -16,6 +16,8 @@
 //          Wang,Yao(wangyao02@baidu.com)
 //          Xiong,Kai(xiongkai@baidu.com)
 
+#include <algorithm>                           // std::shuffle
+#include <random>                              // std::mt19937
 #include <gflags/gflags.h>                       // DEFINE_int32
 #include <butil/unique_ptr.h>                    // std::unique_ptr
 #include <butil/time.h>                          // butil::gettimeofday_us
@@ -1542,7 +1544,8 @@ int ReplicatorGroup::find_the_next_candidate(
             iter = _rmap.begin();  iter != _rmap.end(); ++iter) {
        peers.emplace_back(peerInfo(iter->first,iter->second));
     }
-    std::random_shuffle(peers.begin(), peers.end());
+    std::shuffle(peers.begin(), peers.end(),
+                 std::mt19937(std::random_device()()));
     for (auto iter = peers.begin();  iter != peers.end(); ++iter) {
         if (!conf.contains(iter->peer_id)) {
             continue;

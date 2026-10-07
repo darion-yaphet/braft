@@ -4,6 +4,7 @@
 // Date: 2016/02/03 15:59:18
 
 #include <algorithm>
+#include <random>
 #include <gtest/gtest.h>
 #include <butil/string_printf.h>
 #include "braft/ballot_box.h"
@@ -27,7 +28,8 @@ void benchmark_vector_set(int num_peers) {
         peer_vector.push_back(peer);
     }
     std::vector<braft::PeerId> find_list(peer_vector);
-    std::random_shuffle(find_list.begin(), find_list.end());
+    std::shuffle(find_list.begin(), find_list.end(),
+                 std::mt19937(std::random_device()()));
     const size_t N = 100000;
     size_t counter = 0;
     butil::Timer timer;
