@@ -4,28 +4,20 @@ on: [push, pull_request]
 permissions:
   contents: read
 
+env:
+  # Keep in sync with the brpc version pinned in WORKSPACE
+  BRPC_VERSION: 1.1.0
+
 jobs:
-  build-and-test:
-    name:  >-
-      CI
-      ${{ matrix.os }}
-      ${{ matrix.compiler }}
-      ${{ matrix.build_tool}}
-      unittest ${{ matrix.with_test }}
+  linux:
+    name: linux ${{ matrix.os }} ${{ matrix.compiler }} ${{ matrix.build_tool }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         compiler: [clang, gcc]
-        os: [ubuntu-20.04]
+        os: [ubuntu-22.04, ubuntu-24.04]
         build_tool: [cmake, bazel]
-        with_test: [true, false]
-        exclude:
-          # Not support test using bazel
-          - build_tool: bazel
-            with_test: true
-          - build_tool: cmake
-            with_test: false
         include:
         - compiler: clang
           CC: clang
@@ -39,50 +31,150 @@ jobs:
       CC: ${{ matrix.CC }}
       CXX: ${{ matrix.CXX }}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
       with:
         submodules: true
 
-    - name: Install dependencies on Linux
-      if: ${{ runner.os == 'Linux' }}
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -qq libgflags-dev \
+        sudo apt-get install -y -qq libgflags-dev \
             libprotobuf-dev libprotoc-dev protobuf-compiler \
-            libleveldb-dev libgoogle-perftools-dev
-        sudo apt-get install libgtest-dev && cd /usr/src/gtest && sudo env "PATH=$PATH" cmake . && sudo make && sudo mv ./lib/libgtest* /usr/lib/
+            libleveldb-dev libgoogle-perftools-dev libgtest-dev gdb
+        # Some releases of libgtest-dev only ship sources
+        if [ ! -e /usr/lib/x86_64-linux-gnu/libgtest.a ] && [ ! -e /usr/lib/libgtest.a ]; then
+          cd /usr/src/googletest && sudo cmake . && sudo make -j"$(nproc)" && sudo make install
+        fi
     - name: Install bazel
       if: ${{ matrix.build_tool == 'bazel' }}
       run: |
-        sudo apt-get install python-dev
+        sudo apt-get install -y python3
         wget https://github.com/bazelbuild/bazel/releases/download/0.25.2/bazel-0.25.2-installer-linux-x86_64.sh
         chmod a+x bazel-0.25.2-installer-linux-x86_64.sh
         ./bazel-0.25.2-installer-linux-x86_64.sh --user
-        export PATH="$PATH:$HOME/bin"
     - name: Install brpc
-      working-directory: ${{ github.workspace }}
       if: ${{ matrix.build_tool == 'cmake' }}
+      working-directory: ${{ github.workspace }}
       run: |
         mkdir -p thirdparty
-        git clone https://github.com/brpc/brpc.git thirdparty/brpc && cd thirdparty/brpc && mkdir -p bld && cd bld && cmake .. && make -j4 && sudo make install
+        git clone --depth 1 --branch "${{ env.BRPC_VERSION }}" https://github.com/brpc/brpc.git thirdparty/brpc
+        cmake -S thirdparty/brpc -B thirdparty/brpc/bld
+        cmake --build thirdparty/brpc/bld -j"$(nproc)"
+        sudo cmake --install thirdparty/brpc/bld
     - name: Build with cmake
       if: ${{ matrix.build_tool == 'cmake' }}
       run: |
         cmake -S "${{ github.workspace }}" -B "${{ env.CMAKE_BUILD_DIR }}" -DBUILD_UNIT_TESTS=ON
-        cmake --build "${{ env.CMAKE_BUILD_DIR }}"
+        cmake --build "${{ env.CMAKE_BUILD_DIR }}" -j"$(nproc)"
     - name: Build with bazel
       if: ${{ matrix.build_tool == 'bazel' }}
       run: |
-        ~/.bazel/bin/bazel build -c opt --copt -DHAVE_ZLIB=1 //...
-    - name: Run Tests
-      if: ${{ matrix.with_test }}
-      id: test-braft
+        "$HOME/bin/bazel" build -c opt --copt -DHAVE_ZLIB=1 //...
+    - name: Run tests
+      if: ${{ matrix.build_tool == 'cmake' }}
       working-directory: ${{ github.workspace }}/bld/test
       run: |
         ulimit -c unlimited -S
         sh ../../test/run_tests.sh
     - name: Collect failure info
-      if: ${{ steps.test-braft.conclusion == 'failure'}}
+      if: ${{ matrix.build_tool == 'cmake' && failure() }}
+      working-directory: ${{ github.workspace }}/bld/test
       run: |
         COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
-        gdb -c "$COREFILE" example -ex "thread apply all bt" -ex "set pagination 0" -batch
+        if [ -n "$COREFILE" ]; then
+          BIN=$(find . -maxdepth 1 -type f -name "test_*" | head -n 1)
+          gdb -c "$COREFILE" "$BIN" -ex "thread apply all bt" -ex "set pagination 0" -batch || true
+        fi
+
+  macos:
+    name: macos ${{ matrix.os }} clang cmake
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14]
+
+    env:
+      CMAKE_BUILD_DIR: ${{ github.workspace }}/bld
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Install dependencies
+      run: |
+        brew install openssl gflags protobuf leveldb googletest
+    - name: Install brpc
+      working-directory: ${{ github.workspace }}
+      run: |
+        mkdir -p thirdparty
+        git clone --depth 1 --branch "${{ env.BRPC_VERSION }}" https://github.com/brpc/brpc.git thirdparty/brpc
+        cmake -S thirdparty/brpc -B thirdparty/brpc/bld \
+          -DCMAKE_PREFIX_PATH="$(brew --prefix)" \
+          -DOPENSSL_ROOT_DIR="$(brew --prefix openssl)"
+        cmake --build thirdparty/brpc/bld -j"$(sysctl -n hw.ncpu)"
+        sudo cmake --install thirdparty/brpc/bld
+    - name: Build with cmake
+      run: |
+        cmake -S "${{ github.workspace }}" -B "${{ env.CMAKE_BUILD_DIR }}" -DBUILD_UNIT_TESTS=ON
+        cmake --build "${{ env.CMAKE_BUILD_DIR }}" -j"$(sysctl -n hw.ncpu)"
+    - name: Run tests
+      working-directory: ${{ github.workspace }}/bld/test
+      run: |
+        sh ../../test/run_tests.sh
+
+  sanitize:
+    name: sanitize ${{ matrix.sanitizer }} (ubuntu-22.04 clang)
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, thread]
+        include:
+        - sanitizer: address
+          SANITIZER_FLAGS: "-fsanitize=address -fno-omit-frame-pointer"
+        - sanitizer: thread
+          SANITIZER_FLAGS: "-fsanitize=thread"
+
+    env:
+      CC: clang
+      CXX: clang++
+      CMAKE_BUILD_DIR: ${{ github.workspace }}/bld
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: true
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y -qq libgflags-dev \
+            libprotobuf-dev libprotoc-dev protobuf-compiler \
+            libleveldb-dev libgoogle-perftools-dev libgtest-dev
+        if [ ! -e /usr/lib/x86_64-linux-gnu/libgtest.a ] && [ ! -e /usr/lib/libgtest.a ]; then
+          cd /usr/src/googletest && sudo cmake . && sudo make -j"$(nproc)" && sudo make install
+        fi
+    - name: Install brpc
+      working-directory: ${{ github.workspace }}
+      run: |
+        mkdir -p thirdparty
+        git clone --depth 1 --branch "${{ env.BRPC_VERSION }}" https://github.com/brpc/brpc.git thirdparty/brpc
+        cmake -S thirdparty/brpc -B thirdparty/brpc/bld
+        cmake --build thirdparty/brpc/bld -j"$(nproc)"
+        sudo cmake --install thirdparty/brpc/bld
+    - name: Build with ${{ matrix.sanitizer }} sanitizer
+      run: |
+        cmake -S "${{ github.workspace }}" -B "${{ env.CMAKE_BUILD_DIR }}" -DBUILD_UNIT_TESTS=ON \
+          -DCMAKE_C_FLAGS="${{ matrix.SANITIZER_FLAGS }}" \
+          -DCMAKE_CXX_FLAGS="${{ matrix.SANITIZER_FLAGS }}" \
+          -DCMAKE_EXE_LINKER_FLAGS="${{ matrix.SANITIZER_FLAGS }}"
+        cmake --build "${{ env.CMAKE_BUILD_DIR }}" -j"$(nproc)"
+    - name: Run tests
+      working-directory: ${{ github.workspace }}/bld/test
+      env:
+        # Leak detection is disabled: brpc/leveldb have known one-off static leaks
+        ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
+        TSAN_OPTIONS: halt_on_error=1
+      run: |
+        ulimit -c unlimited -S
+        sh ../../test/run_tests.sh
