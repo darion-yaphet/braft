@@ -65,16 +65,20 @@ jobs:
       id: test-braft
       working-directory: ${{ github.workspace }}/bld/test
       run: |
-        ulimit -c unlimited -S
+        # GitHub runners pipe cores to apport by default; redirect them into
+        # cwd so the Collect step below can find them
+        ulimit -c unlimited
+        echo 'core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern
         sh ../../test/run_tests.sh
     - name: Collect failure info
       if: ${{ steps.test-braft.conclusion == 'failure' }}
       working-directory: ${{ github.workspace }}/bld/test
       run: |
-        COREFILE=$(find . -maxdepth 1 -name "core*" | head -n 1)
+        COREFILE=$(find . -maxdepth 1 -name "core.*" | head -n 1)
         if [ -n "$COREFILE" ]; then
-          BIN=$(find . -maxdepth 1 -type f -name "test_*" | head -n 1)
-          gdb -c "$COREFILE" "$BIN" -ex "thread apply all bt" -ex "set pagination 0" -batch || true
+          # core pattern is core.<exe>.<pid>, so the crashing binary is known
+          BIN=$(basename "$COREFILE" | cut -d. -f2)
+          gdb -c "$COREFILE" "./$BIN" -ex "thread apply all bt" -ex "set pagination 0" -batch || true
         fi
 
   macos:
