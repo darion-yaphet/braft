@@ -1,0 +1,7 @@
+# ThreadSanitizer suppressions for braft unit tests.
+#
+# bvar windows/recorders are destroyed during test teardown while bvar's
+# background sampler thread may still invoke virtual methods on them
+# (data race on vptr, ctor/dtor vs virtual call). This lifetime race lives
+# inside brpc/bvar (third-party) and is benign for test shutdown.
+race:bvar::detail::WindowBase

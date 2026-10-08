@@ -24,6 +24,17 @@ set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
 include(FindThreads)
 include(FindProtobuf)
 
+# protobuf >= 22 depends on abseil at link time, which module-mode
+# FindProtobuf does not carry. Prefer the config-mode imported target
+# (ships with homebrew protobuf and propagates absl), fall back to the
+# module-mode library path otherwise.
+find_package(Protobuf CONFIG QUIET)
+if(TARGET protobuf::libprotobuf)
+    set(PROTOBUF_LINK_LIB protobuf::libprotobuf)
+else()
+    set(PROTOBUF_LINK_LIB ${PROTOBUF_LIBRARY})
+endif()
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     # require at least gcc 4.8
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
@@ -98,7 +109,7 @@ if(BRPC_WITH_GLOG)
         ${BRPC_LIB}
         ${GFLAGS_LIB}
         ${GLOG_LIB}
-        ${PROTOBUF_LIBRARY}
+        ${PROTOBUF_LINK_LIB}
         ${LEVELDB_LIB}
         ${CMAKE_THREAD_LIBS_INIT}
         ${OPENSSL_LIBRARIES}
@@ -110,7 +121,7 @@ else()
     set(DYNAMIC_LIB
         ${BRPC_LIB}
         ${GFLAGS_LIB}
-        ${PROTOBUF_LIBRARY}
+        ${PROTOBUF_LINK_LIB}
         ${LEVELDB_LIB}
         ${CMAKE_THREAD_LIBS_INIT}
         ${OPENSSL_LIBRARIES}

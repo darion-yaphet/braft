@@ -71,7 +71,7 @@ jobs:
         echo 'core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern
         sh ../../test/run_tests.sh
     - name: Collect failure info
-      if: ${{ steps.test-braft.conclusion == 'failure' }}
+      if: ${{ steps['test-braft'].conclusion == 'failure' }}
       working-directory: ${{ github.workspace }}/bld/test
       run: |
         COREFILE=$(find . -maxdepth 1 -name "core.*" | head -n 1)
@@ -113,7 +113,8 @@ jobs:
     - name: Build with cmake
       run: |
         cmake -S "${{ github.workspace }}" -B "${{ env.CMAKE_BUILD_DIR }}" -DBUILD_UNIT_TESTS=ON \
-          -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+          -DCMAKE_PREFIX_PATH="$(brew --prefix)"
         cmake --build "${{ env.CMAKE_BUILD_DIR }}" -j"$(sysctl -n hw.ncpu)"
     - name: Run tests
       working-directory: ${{ github.workspace }}/bld/test
@@ -171,7 +172,7 @@ jobs:
       env:
         # Leak detection is disabled: brpc/leveldb have known one-off static leaks
         ASAN_OPTIONS: detect_leaks=0:abort_on_error=1
-        TSAN_OPTIONS: halt_on_error=1
+        TSAN_OPTIONS: halt_on_error=1:suppressions=${{ github.workspace }}/test/tsan_suppressions.txt
       run: |
         ulimit -c unlimited -S
         sh ../../test/run_tests.sh
