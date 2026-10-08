@@ -511,7 +511,9 @@ int append_corrupted_data(const char* filename) {
   if (fp == NULL) {
     return -1;
   }
-  int ret = std::fputs(header_buf, fp);
+  // NOTE: header_buf is not NUL-terminated, must not use fputs here.
+  int ret = std::fwrite(header_buf, 1, sizeof(header_buf), fp) == sizeof(header_buf)
+                ? 0 : -1;
   std::fclose(fp);
   return ret;
 }
